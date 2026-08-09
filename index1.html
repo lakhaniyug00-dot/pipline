@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Tracker — Notebook</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&family=Inter:wght@400;600;700&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="style1.css" />
+</head>
+
+<body>
+
+    <div class="toolbar">
+        <form class="field" id="add-form">
+            <input type="text" id="data-input" placeholder="Enter Any Data" autocomplete="off" />
+            <button type="submit" class="btn primary">Add Data</button>
+        </form>
+        <button class="btn ghost" id="add-column-btn">+ Add Column</button>
+        <button class="btn toggle-delete" id="toggle-delete-btn">Delete: Off</button>
+        <button class="btn danger" id="reset-btn">Reset</button>
+
+        <div class="search-group" style="display: flex; gap: 8px; margin-left: auto; border-left: 2px solid rgba(0,0,0,0.1); padding-left: 14px;" class="no-print">
+            <input type="text" id="col-search-input" placeholder="Search column..." autocomplete="off" style="width: 160px;" />
+            <button class="btn ghost" id="col-search-btn">🔍 Search</button>
+        </div>
+    </div>
+
+    <!-- Search Results Display -->
+    <div id="search-result-container"
+        style="display: none; max-width: 1200px; margin: 0 auto 20px auto; padding: 20px; background: #fffdf4; border: 1.5px solid #c9b97b; border-radius: 12px; box-shadow: 0 4px 12px rgba(40,30,10,0.1); font-family: 'Patrick Hand', cursive; color: #1a3a8a; font-size: 18px; text-align: center;">
+        <!-- Results will be injected here -->
+    </div>
+
+    <div class="page">
+        <div class="holes" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <div class="total-pip" id="total-pip">
+            <span class="total-pip-label">Total PIP</span>
+            <span class="total-pip-sep">:</span>
+            <span class="total-pip-value" id="total-pip-value">0</span>
+        </div>
+
+        <div class="columns" id="columns"></div>
+    </div>
+
+    <!-- ===== NAME COUNT SUMMARY TABLE ===== -->
+    <div class="summary-section animated" id="summary-section">
+        <div class="summary-card">
+            <div class="summary-table-wrap" id="summary-table-wrap">
+                <div class="summary-empty">Add some data to see the summary table.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SUFFIX COUNT SUMMARY TABLE ===== -->
+    <div class="summary-section animated" id="suffix-section">
+        <div class="summary-card">
+            <div class="summary-table-wrap" id="suffix-table-wrap">
+                <div class="summary-empty">Add data to the second and third columns to see this summary.</div>
+            </div>
+        </div>
+    </div>
+
+
+    <div style="text-align: center; margin: 3rem 0; padding-bottom: 2rem;" class="no-print">
+        <button class="btn primary" id="download-pdf-btn"
+            style="padding: 0.8rem 2rem; font-size: 1.1rem; border-radius: 8px;">Download as PDF</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="script1.js"></script>
+</body>
+
+</html>
