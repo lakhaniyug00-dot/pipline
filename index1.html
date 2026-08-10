@@ -24,10 +24,18 @@
         </form>
         <button class="btn ghost" id="add-column-btn">+ Add Column</button>
         <button class="btn toggle-delete" id="toggle-delete-btn">Delete: Off</button>
+        <button class="btn undo" id="undo-btn" disabled title="Nothing to undo">↩ Undo</button>
+        <button class="btn ghost history-btn" id="history-btn" onclick="window.location.href='history.html'">
+            History</button>
         <button class="btn danger" id="reset-btn">Reset</button>
 
-        <div class="search-group" style="display: flex; gap: 8px; margin-left: auto; border-left: 2px solid rgba(0,0,0,0.1); padding-left: 14px;" class="no-print">
-            <input type="text" id="col-search-input" placeholder="Search column..." autocomplete="off" style="width: 160px;" />
+        <div class="search-group no-print"
+            style="display: flex; gap: 8px; margin-left: auto; border-left: 2px solid rgba(0,0,0,0.1); padding-left: 14px;">
+            <div class="search-input-wrap" style="position: relative;">
+                <input type="text" id="col-search-input" placeholder="Click to see columns..." autocomplete="off"
+                    style="width: 200px;" />
+                <ul id="col-search-dropdown" class="col-dropdown" style="display:none;"></ul>
+            </div>
             <button class="btn ghost" id="col-search-btn">🔍 Search</button>
         </div>
     </div>

@@ -1,6 +1,29 @@
 const STORAGE_KEY = 'data-tracker-v2';
+const HISTORY_KEY = 'data-tracker-deleted-history';
 let state = loadState() || { columns: [{ name: '', items: [] }] };
 let deleteMode = false;
+const undoStack = []; // stores deep-copied past states
+
+function pushUndo() {
+    undoStack.push(JSON.parse(JSON.stringify(state)));
+    if (undoStack.length > 50) undoStack.shift(); // cap at 50
+    updateUndoBtn();
+}
+
+function updateUndoBtn() {
+    const btn = document.getElementById('undo-btn');
+    if (!btn) return;
+    btn.disabled = undoStack.length === 0;
+    btn.title = undoStack.length === 0 ? 'Nothing to undo' : `Undo last move (${undoStack.length} available)`;
+}
+
+function undoLast() {
+    if (undoStack.length === 0) return;
+    state = undoStack.pop();
+    saveState();
+    updateUndoBtn();
+    render();
+}
 
 function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { }
@@ -20,6 +43,23 @@ function loadState() {
 
 function uid() {
     return 'i_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+}
+
+// === Save a deleted item to history log ===
+function saveToHistory(item, colIdx, colName) {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        const history = raw ? JSON.parse(raw) : [];
+        history.unshift({
+            hid: 'h_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+            value: item.value,
+            date: item.date || '',
+            deletedAt: Date.now(),
+            fromColIdx: colIdx,
+            fromColName: colName
+        });
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch (e) { }
 }
 const COLOR_VARS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'];
 function colorForColumn(index) { return `var(${COLOR_VARS[index % COLOR_VARS.length]})`; }
@@ -182,6 +222,7 @@ function render(newlyAddedId = null) {
                     li.appendChild(editBtn);
                 }
 
+
                 // Date badge — small white box on left, click to change manually
                 const dateBadge = document.createElement('span');
                 dateBadge.className = 'item-date' + (item.date ? ' has-date' : '');
@@ -315,6 +356,18 @@ function extractNumber(value) {
     return /^\d+$/.test(prefix) ? prefix : null; // only pure numeric prefix
 }
 
+// === Sort a column's items by leading number (ascending). Non-numeric go to end. ===
+function sortItems(items) {
+    items.sort((a, b) => {
+        const na = extractNumber(a.value);
+        const nb = extractNumber(b.value);
+        const ia = na !== null ? parseInt(na, 10) : Infinity;
+        const ib = nb !== null ? parseInt(nb, 10) : Infinity;
+        return ia - ib;
+    });
+}
+
+
 function addData(rawValue) {
     const value = String(rawValue);
     if (value.trim() === '') return;
@@ -341,6 +394,7 @@ function addData(rawValue) {
 
     const item = { id: uid(), value: value, date: '' };
     state.columns[0].items.push(item);
+    sortItems(state.columns[0].items); // keep column sorted by number
     saveState();
     render(item.id);
 }
@@ -351,12 +405,15 @@ function moveToNext(colIdx, itemId) {
     const fromList = state.columns[colIdx].items;
     const original = fromList.find(i => i.id === itemId);
     if (!original || original.moved) return;
+    pushUndo(); // save state before moving
     original.moved = true;
     const copy = { id: uid(), value: original.value, date: original.date || '' };
     state.columns[colIdx + 1].items.push(copy);
+    sortItems(state.columns[colIdx + 1].items); // keep destination column sorted
     saveState();
     render(copy.id);
 }
+
 
 function deleteItem(colIdx, itemId) {
     const list = state.columns[colIdx].items;
@@ -364,14 +421,19 @@ function deleteItem(colIdx, itemId) {
     if (idx === -1) return;
 
     const lastIndex = state.columns.length - 1;
-    const targetValue = list[idx].value;
+    const deletedItem = list[idx];
+    const targetValue = deletedItem.value;
+    const colName = displayName(state.columns[colIdx], colIdx);
 
     if (colIdx === lastIndex) {
-        // Last column delete: remove all items matching this value from EVERY column
+        // Last column delete: record & remove all matching items from EVERY column
+        // Record the last-column item for history
+        saveToHistory(deletedItem, colIdx, colName);
         state.columns.forEach(col => {
             col.items = col.items.filter(i => i.value !== targetValue);
         });
     } else {
+        saveToHistory(deletedItem, colIdx, colName);
         list.splice(idx, 1);
     }
 
@@ -529,6 +591,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('reset-btn').addEventListener('click', resetAll);
     document.getElementById('toggle-delete-btn').addEventListener('click', toggleDeleteMode);
 
+    const undoBtn = document.getElementById('undo-btn');
+    if (undoBtn) {
+        undoBtn.addEventListener('click', undoLast);
+        updateUndoBtn(); // set initial disabled state
+    }
+
     // Search logic for residue / missing numbers
     const searchBtn = document.getElementById('col-search-btn');
     const searchInput = document.getElementById('col-search-input');
@@ -537,7 +605,47 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = searchInput.value.trim().toLowerCase();
             const resBox = document.getElementById('search-result-container');
             if (!query) {
-                resBox.style.display = 'none';
+                // Render a beautiful table of all columns when search is empty
+                let html = '<div style="margin-bottom: 15px; font-size: 22px; font-weight: bold; color: #1a3a8a;">All Columns Overview</div>';
+                html += '<table style="width: 100%; border-collapse: collapse; text-align: left; font-family: \'Patrick Hand\', cursive;">';
+                html += '<thead><tr style="border-bottom: 2px solid #c9b97b; color: #a0935a; font-family: \'Inter\', sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">';
+                html += '<th style="padding: 12px 16px; width: 25%;">Column Name</th>';
+                html += '<th style="padding: 12px 16px; width: 60%;">Active Numbers</th>';
+                html += '<th style="padding: 12px 16px; text-align: center; width: 15%;">Total</th>';
+                html += '</tr></thead><tbody>';
+
+                state.columns.forEach((col, i) => {
+                    const activeNumbers = [];
+                    col.items.forEach(item => {
+                        if (!item.moved) {
+                            const num = extractNumber(item.value);
+                            if (num !== null) activeNumbers.push(parseInt(num, 10));
+                        }
+                    });
+                    activeNumbers.sort((a, b) => a - b);
+
+                    html += '<tr style="border-bottom: 1px solid #e8d99a; transition: background 0.2s;" onmouseover="this.style.background=\'rgba(26,58,138,0.04)\'" onmouseout="this.style.background=\'none\'">';
+
+                    html += `<td style="padding: 12px 16px; display: flex; align-items: center; gap: 8px;">`;
+                    html += `<div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,0.12); background-color: ${colorForColumn(i)}; flex-shrink: 0;"></div>`;
+                    html += `<strong style="font-size: 19px;">${escapeHtml(displayName(col, i))}</strong></td>`;
+
+                    if (activeNumbers.length === 0) {
+                        html += `<td style="padding: 12px 16px; color: #888; font-style: italic;">No active numbers</td>`;
+                    } else {
+                        html += `<td style="padding: 12px 16px; color: #1a3a8a; font-weight: 600; font-size: 20px; line-height: 1.4;">${activeNumbers.join(', ')}</td>`;
+                    }
+
+                    html += `<td style="padding: 12px 16px; text-align: center;">
+                        <span style="background: rgba(26,58,138,0.1); color: var(--ink-soft); padding: 4px 12px; border-radius: 20px; font-weight: bold; font-family: 'Inter', sans-serif; font-size: 14px;">${activeNumbers.length}</span>
+                    </td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+
+                resBox.innerHTML = html;
+                resBox.style.display = 'block';
                 return;
             }
 
@@ -622,6 +730,64 @@ document.addEventListener('DOMContentLoaded', () => {
                 searchBtn.click();
             }
         });
+
+        // Dropdown logic for search input
+        const dropdown = document.getElementById('col-search-dropdown');
+        if (dropdown) {
+            searchInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                dropdown.innerHTML = '';
+
+                const header = document.createElement('div');
+                header.className = 'col-dropdown-header';
+                header.textContent = 'Select a column';
+                dropdown.appendChild(header);
+
+                if (state.columns.length === 0) {
+                    const empty = document.createElement('li');
+                    empty.textContent = 'No columns available';
+                    empty.style.pointerEvents = 'none';
+                    dropdown.appendChild(empty);
+                } else {
+                    state.columns.forEach((col, i) => {
+                        const li = document.createElement('li');
+
+                        const dot = document.createElement('div');
+                        dot.className = 'col-dot';
+                        dot.style.backgroundColor = colorForColumn(i);
+
+                        const nameSpan = document.createElement('span');
+                        nameSpan.textContent = displayName(col, i);
+
+                        const countSpan = document.createElement('span');
+                        countSpan.className = 'col-count';
+                        countSpan.textContent = col.items.filter(item => !item.moved).length;
+
+                        li.appendChild(dot);
+                        li.appendChild(nameSpan);
+                        li.appendChild(countSpan);
+
+                        li.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            searchInput.value = displayName(col, i);
+                            dropdown.style.display = 'none';
+                            searchBtn.click();
+                        });
+
+                        dropdown.appendChild(li);
+                    });
+                }
+
+                dropdown.style.display = 'block';
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+        }
     }
 
     const downloadPdfBtn = document.getElementById('download-pdf-btn');
