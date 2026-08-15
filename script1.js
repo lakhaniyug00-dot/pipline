@@ -1,13 +1,28 @@
 const STORAGE_KEY = 'data-tracker-v2';
 const HISTORY_KEY = 'data-tracker-deleted-history';
+const UNDO_KEY = 'data-tracker-undo-stack';
 let state = loadState() || { columns: [{ name: '', items: [] }] };
 let deleteMode = false;
-const undoStack = []; // stores deep-copied past states
+const undoStack = loadUndoStack(); // stores deep-copied past states (persisted)
 
 function pushUndo() {
     undoStack.push(JSON.parse(JSON.stringify(state)));
     if (undoStack.length > 50) undoStack.shift(); // cap at 50
+    saveUndoStack();
     updateUndoBtn();
+}
+
+function saveUndoStack() {
+    try { localStorage.setItem(UNDO_KEY, JSON.stringify(undoStack)); } catch (e) { }
+}
+
+function loadUndoStack() {
+    try {
+        const raw = localStorage.getItem(UNDO_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
 }
 
 function updateUndoBtn() {
@@ -21,6 +36,7 @@ function undoLast() {
     if (undoStack.length === 0) return;
     state = undoStack.pop();
     saveState();
+    saveUndoStack();
     updateUndoBtn();
     render();
 }
@@ -50,10 +66,20 @@ function saveToHistory(item, colIdx, colName) {
     try {
         const raw = localStorage.getItem(HISTORY_KEY);
         const history = raw ? JSON.parse(raw) : [];
+
+        // Build colDates: include all previous column dates + current column date
+        const colDates = Array.isArray(item.colDates) ? [...item.colDates] : [];
+        // Ensure the current column's date is recorded (if not already last entry)
+        const lastEntry = colDates[colDates.length - 1];
+        if (!lastEntry || lastEntry.colIdx !== colIdx) {
+            colDates.push({ colIdx, colName, date: item.date || '' });
+        }
+
         history.unshift({
             hid: 'h_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
             value: item.value,
             date: item.date || '',
+            colDates: colDates,
             deletedAt: Date.now(),
             fromColIdx: colIdx,
             fromColName: colName
@@ -211,6 +237,19 @@ function render(newlyAddedId = null) {
 
                 // Manual edit (pencil) — hidden via CSS for moved/last-col items
                 if (!item.moved) {
+                    // Undo arrow button — placed LEFT of the pencil
+                    if (colIdx > 0) {
+                        const undoItemBtn = document.createElement('button');
+                        undoItemBtn.className = 'item-undo-btn';
+                        undoItemBtn.title = 'Undo — move back to previous column';
+                        undoItemBtn.textContent = '↩';
+                        undoItemBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            undoItemMove(colIdx, item.id);
+                        });
+                        li.appendChild(undoItemBtn);
+                    }
+
                     const editBtn = document.createElement('button');
                     editBtn.className = 'item-edit';
                     editBtn.title = 'Edit value';
@@ -368,6 +407,35 @@ function sortItems(items) {
 }
 
 
+// === Add an item directly to a specific column (used for last column manual entry) ===
+function addDirectToColumn(colIdx, rawValue) {
+    const value = String(rawValue).trim();
+    if (value === '') return;
+
+    const col = state.columns[colIdx];
+    if (!col) return;
+
+    // Duplicate number-prefix check across active items in ALL columns
+    const newNum = extractNumber(value);
+    if (newNum !== null) {
+        for (const c of state.columns) {
+            for (const item of c.items) {
+                if (item.moved) continue;
+                if (extractNumber(item.value) === newNum) {
+                    alert(`⚠️ Number "${newNum}" is already used!\nExisting: "${item.value}"\n\nPlease use a different number.`);
+                    return;
+                }
+            }
+        }
+    }
+
+    const item = { id: uid(), value: value, date: '', colDates: [] };
+    col.items.push(item);
+    sortItems(col.items);
+    saveState();
+    render(item.id);
+}
+
 function addData(rawValue) {
     const value = String(rawValue);
     if (value.trim() === '') return;
@@ -392,7 +460,7 @@ function addData(rawValue) {
         }
     }
 
-    const item = { id: uid(), value: value, date: '' };
+    const item = { id: uid(), value: value, date: '', colDates: [] };
     state.columns[0].items.push(item);
     sortItems(state.columns[0].items); // keep column sorted by number
     saveState();
@@ -406,14 +474,51 @@ function moveToNext(colIdx, itemId) {
     const original = fromList.find(i => i.id === itemId);
     if (!original || original.moved) return;
     pushUndo(); // save state before moving
+
+    // Append this column's date to the colDates trail
+    const colDates = Array.isArray(original.colDates) ? [...original.colDates] : [];
+    colDates.push({
+        colIdx: colIdx,
+        colName: displayName(state.columns[colIdx], colIdx),
+        date: original.date || '',
+        value: original.value
+    });
+
     original.moved = true;
-    const copy = { id: uid(), value: original.value, date: original.date || '' };
+    const copy = {
+        id: uid(),
+        value: original.value,
+        date: original.date || '',
+        colDates: colDates
+    };
     state.columns[colIdx + 1].items.push(copy);
     sortItems(state.columns[colIdx + 1].items); // keep destination column sorted
     saveState();
     render(copy.id);
 }
 
+// === Undo a single item's move: remove from current col, un-strike in previous col ===
+function undoItemMove(colIdx, itemId) {
+    if (colIdx <= 0) return;
+    const curList = state.columns[colIdx].items;
+    const item = curList.find(i => i.id === itemId);
+    if (!item || item.moved) return;
+
+    pushUndo();
+
+    // Remove this item from current column
+    state.columns[colIdx].items = curList.filter(i => i.id !== itemId);
+
+    // Un-mark the matching moved item in the previous column (by value)
+    const prevList = state.columns[colIdx - 1].items;
+    const movedOrigin = prevList.find(i => i.moved && i.value === item.value);
+    if (movedOrigin) {
+        movedOrigin.moved = false;
+    }
+
+    saveState();
+    render();
+}
 
 function deleteItem(colIdx, itemId) {
     const list = state.columns[colIdx].items;
@@ -427,10 +532,27 @@ function deleteItem(colIdx, itemId) {
 
     if (colIdx === lastIndex) {
         // Last column delete: record & remove all matching items from EVERY column
-        // Record the last-column item for history
-        saveToHistory(deletedItem, colIdx, colName);
+        // Collect all colDates from all columns for this value
+        let allColDates = Array.isArray(deletedItem.colDates) ? [...deletedItem.colDates] : [];
+        // Also add current (last) column's date
+        const lastEntry = allColDates[allColDates.length - 1];
+        if (!lastEntry || lastEntry.colIdx !== colIdx) {
+            allColDates.push({ colIdx, colName, date: deletedItem.date || '', value: deletedItem.value });
+        }
+        // Create a combined item for history with full colDates trail
+        const histItem = { ...deletedItem, colDates: allColDates };
+        saveToHistory(histItem, colIdx, colName);
+
+        const targetNum = extractNumber(targetValue);
         state.columns.forEach(col => {
-            col.items = col.items.filter(i => i.value !== targetValue);
+            col.items = col.items.filter(i => {
+                if (i.value === targetValue) return false;
+                if (targetNum !== null) {
+                    const iNum = extractNumber(i.value);
+                    if (iNum === targetNum) return false;
+                }
+                return true;
+            });
         });
     } else {
         saveToHistory(deletedItem, colIdx, colName);

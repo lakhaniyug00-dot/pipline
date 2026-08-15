@@ -68,7 +68,29 @@ function showToast(msg) {
     toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ---- Render ----
+// ---- Helper: render all column dates for a history entry ----
+function renderColDates(entry) {
+    const colDates = Array.isArray(entry.colDates) && entry.colDates.length > 0
+        ? entry.colDates
+        : null;
+
+    if (!colDates) {
+        // Fallback for old entries that only have a single date
+        if (!entry.date) return '<span style="color:#ccc">—</span>';
+        return `<span style="color:#888;font-size:13px">${escapeHtml(entry.date)}</span>`;
+    }
+
+    let html = '<table style="border-collapse:collapse;font-size:12px;min-width:180px">';
+    colDates.forEach(cd => {
+        html += `<tr>
+            <td style="padding:2px 8px 2px 0;color:#a0935a;font-family:\'Inter\',sans-serif;font-size:11px;white-space:nowrap;font-weight:600">${escapeHtml(cd.colName || `Col ${cd.colIdx + 1}`)}</td>
+            <td style="padding:2px 0;color:#1a3a8a;font-weight:500;white-space:nowrap">${cd.date ? escapeHtml(cd.date) : '<span style="color:#ccc">—</span>'}</td>
+        </tr>`;
+    });
+    html += '</table>';
+    return html;
+}
+
 function render() {
     let history = loadHistory();
     const wrap = document.getElementById('hist-table-wrap');
@@ -80,7 +102,11 @@ function render() {
         history = history.filter(entry => {
             const v = (entry.value || '').toLowerCase();
             const d = (entry.date || '').toLowerCase();
-            return v.includes(query) || d.includes(query);
+            // Also search inside colDates
+            const colDatesStr = Array.isArray(entry.colDates)
+                ? entry.colDates.map(cd => (cd.colName + ' ' + cd.date).toLowerCase()).join(' ')
+                : '';
+            return v.includes(query) || d.includes(query) || colDatesStr.includes(query);
         });
     }
 
@@ -101,7 +127,7 @@ function render() {
                 <tr>
                     <th class="th-center">#</th>
                     <th>Name</th>
-                    <th>Date</th>
+                    <th>Column Dates</th>
                     <th>From Column</th>
                     <th>Deleted At</th>
                     <th class="th-center">Actions</th>
@@ -114,7 +140,7 @@ function render() {
             <tr id="row-${entry.hid}">
                 <td class="td-num">${i + 1}</td>
                 <td class="td-value">${escapeHtml(entry.value)}</td>
-                <td class="td-date">${entry.date ? escapeHtml(entry.date) : '<span style="color:#ccc">—</span>'}</td>
+                <td class="td-date">${renderColDates(entry)}</td>
                 <td class="td-col">${escapeHtml(entry.fromColName || `Column ${entry.fromColIdx + 1}`)}</td>
                 <td class="td-deleted">${formatDateTime(entry.deletedAt)}</td>
                 <td class="td-actions">
@@ -147,13 +173,7 @@ function restoreItem(hid) {
         return;
     }
 
-    // Pick target column: use original column index if it still exists, else column 0
-    const targetColIdx = (entry.fromColIdx < mainState.columns.length)
-        ? entry.fromColIdx
-        : 0;
-    const targetCol = mainState.columns[targetColIdx];
-
-    // Check for duplicate number
+    // Check for duplicate number (only against active/non-moved items)
     const newNum = extractNumber(entry.value);
     if (newNum !== null) {
         for (const col of mainState.columns) {
@@ -166,20 +186,113 @@ function restoreItem(hid) {
         }
     }
 
-    // Add back to the target column
-    const restored = { id: uid(), value: entry.value, date: entry.date || '' };
-    targetCol.items.push(restored);
-    sortItems(targetCol.items);
-    saveMainState(mainState);
+    const colDates = Array.isArray(entry.colDates) && entry.colDates.length > 0
+        ? entry.colDates : null;
 
-    // Remove from history
-    history.splice(idx, 1);
-    saveHistory(history);
+    if (colDates) {
+        // === Full restore: put back struck-through copies in all intermediate columns ===
+        colDates.forEach(cd => {
+            const ci = cd.colIdx;
+            if (ci >= mainState.columns.length) return;
+            const col = mainState.columns[ci];
 
-    const colName = targetCol.name && targetCol.name.trim()
-        ? targetCol.name
-        : `Column ${targetColIdx + 1}`;
-    showToast(`✅ "${entry.value}" restored to ${colName}!`);
+            // Use historical value if recorded, otherwise clean up or default to entry.value
+            let val = cd.value || entry.value;
+            // For legacy intermediate columns (like column 0), if cd.value is missing, we can try to restore just the clean number
+            if (!cd.value && ci === 0) {
+                const num = extractNumber(entry.value);
+                if (num !== null) val = num;
+            }
+
+            // Avoid duplicates (match by exact value or leading number)
+            const valNum = extractNumber(val);
+            const exists = col.items.some(i => {
+                if (i.value === val) return true;
+                if (valNum !== null) {
+                    const iNum = extractNumber(i.value);
+                    if (iNum === valNum) return true;
+                }
+                return false;
+            });
+
+            if (!exists) {
+                col.items.push({
+                    id: uid(),
+                    value: val,
+                    date: cd.date || '',
+                    moved: true,   // struck-through, same as original state
+                    colDates: []
+                });
+                sortItems(col.items);
+            }
+        });
+
+        // === Restore the active copy in the final (fromColIdx) column ===
+        const finalColIdx = (entry.fromColIdx < mainState.columns.length)
+            ? entry.fromColIdx : mainState.columns.length - 1;
+        const finalCol = mainState.columns[finalColIdx];
+
+        // Retrieve active value (historical final value or entry.value)
+        const finalVal = entry.value;
+        const finalValNum = extractNumber(finalVal);
+
+        // Remove any accidental moved copies we might have just added above for this value/number
+        finalCol.items = finalCol.items.filter(i => {
+            if (i.value === finalVal && i.moved) return false;
+            if (finalValNum !== null) {
+                const iNum = extractNumber(i.value);
+                if (iNum === finalValNum && i.moved) return false;
+            }
+            return true;
+        });
+
+        // Add active copy if it doesn't exist
+        const activeExists = finalCol.items.some(i => {
+            if (i.value === finalVal && !i.moved) return true;
+            if (finalValNum !== null) {
+                const iNum = extractNumber(i.value);
+                if (iNum === finalValNum && !i.moved) return true;
+            }
+            return false;
+        });
+
+        if (!activeExists) {
+            finalCol.items.push({
+                id: uid(),
+                value: finalVal,
+                date: entry.date || '',
+                moved: false,
+                colDates: colDates
+            });
+            sortItems(finalCol.items);
+        }
+
+        saveMainState(mainState);
+        history.splice(idx, 1);
+        saveHistory(history);
+
+        const colName = finalCol.name && finalCol.name.trim()
+            ? finalCol.name : `Column ${finalColIdx + 1}`;
+        showToast(`✅ "${entry.value}" fully restored (all ${colDates.length} columns)!`);
+
+    } else {
+        // === Fallback for old entries without colDates ===
+        const targetColIdx = (entry.fromColIdx < mainState.columns.length)
+            ? entry.fromColIdx : 0;
+        const targetCol = mainState.columns[targetColIdx];
+        const restored = { id: uid(), value: entry.value, date: entry.date || '', colDates: [] };
+        targetCol.items.push(restored);
+        sortItems(targetCol.items);
+        saveMainState(mainState);
+
+        history.splice(idx, 1);
+        saveHistory(history);
+
+        const colName = targetCol.name && targetCol.name.trim()
+            ? targetCol.name : `Column ${targetColIdx + 1}`;
+        showToast(`✅ "${entry.value}" restored to ${colName}!`);
+    }
+
     render();
 }
 
