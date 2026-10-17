@@ -1,33 +1,12 @@
 # Pipe Management & Tracking System
 
-A dynamic, real-time pipe management and tracking application with notebook aesthetics, persistent SQLite backend, and multi-device synchronization.
+A pure client-side HTML, CSS, and JavaScript pipe tracking application with notebook styling, automatic local persistence, full undo/delete history, and PDF export.
 
 ## 🚀 Features
 
-- **Dynamic Backend Persistence**: Stores tracker state, columns, items, dates, and undo history in an SQLite database.
-- **Real-Time Multi-Device Sync**: Synchronizes updates across multiple browser tabs and devices instantly using Server-Sent Events (SSE).
-- **Offline / Local Fallback**: Seamlessly continues working even if the server is offline by caching data in browser `localStorage`.
-- **Pipeline Notebook UI**: Notebook-style columns, strike-through item progressions, and automatic ordering.
-- **History & Restore**: Dedicated deleted history log with full restoration capabilities across previous column states.
-- **PDF Export**: Generate compact, high-resolution printable PDF reports.
-
-## 🛠️ Getting Started
-
-### 1. Install Dependencies
-```bash
-npm install
-```
-
-### 2. Start the Server
-```bash
-npm start
-```
-The server will start at:
-- **Local:** `http://localhost:5000`
-- **Network (Mobile / Tablet / Other PCs):** `http://<your-ip>:5000`
-
-### 3. Development Mode
-To run with automatic file reloading:
-```bash
-npm run dev
-```
+- **100% Pure HTML, CSS & JavaScript**: Zero server dependencies, zero build steps, zero node requirements.
+- **Fast & Reliable**: Runs instantly on Vercel, GitHub Pages, Netlify, or by opening `index.html` directly in any web browser.
+- **Automatic Local Persistence**: All columns, pipe entries, column dates, and undo stack automatically persist in browser `localStorage`.
+- **Pipeline Notebook UI**: Perforated notebook binder styling, cursive handwritten fonts (*Caveat*, *Patrick Hand*), dynamic column color themes, and automatic numerical sorting.
+- **Deleted History & Full Restoration**: Dedicated history log with column dates and one-click item restoration.
+- **Print & PDF Export**: Clean, high-resolution printable PDF export.

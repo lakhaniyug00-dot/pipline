@@ -14,9 +14,6 @@ function pushUndo() {
 
 function saveUndoStack() {
     try { localStorage.setItem(UNDO_KEY, JSON.stringify(undoStack)); } catch (e) { }
-    if (window.ApiClient) {
-        window.ApiClient.saveUndoStack(undoStack);
-    }
 }
 
 function loadUndoStack() {
@@ -46,9 +43,6 @@ function undoLast() {
 
 function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { }
-    if (window.ApiClient) {
-        window.ApiClient.saveState(state);
-    }
 }
 function loadState() {
     try {
@@ -93,10 +87,6 @@ function saveToHistory(item, colIdx, colName) {
 
         history.unshift(entry);
         localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-
-        if (window.ApiClient) {
-            window.ApiClient.saveDeletedItem(entry);
-        }
     } catch (e) { }
 }
 const COLOR_VARS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'];
@@ -978,31 +968,6 @@ function initApp() {
     }
 
     render();
-
-    // Dynamic backend synchronization
-    if (window.ApiClient) {
-        window.ApiClient.getState().then(remoteState => {
-            if (remoteState && Array.isArray(remoteState.columns) && remoteState.columns.length > 0) {
-                state = remoteState;
-                render();
-            }
-        });
-
-        window.ApiClient.getUndoStack().then(remoteUndo => {
-            if (Array.isArray(remoteUndo)) {
-                undoStack.length = 0;
-                undoStack.push(...remoteUndo);
-                updateUndoBtn();
-            }
-        });
-
-        window.ApiClient.onEvent(evt => {
-            if (evt.type === 'state_updated' && evt.payload) {
-                state = evt.payload;
-                render();
-            }
-        });
-    }
 }
 
 // Guaranteed execution whether DOM is loading or already parsed
