@@ -4,6 +4,7 @@
   "description": "Dynamic Pipe Management and Tracking System with SQLite persistence and real-time synchronization",
   "main": "server.js",
   "scripts": {
+    "build": "echo 'Build complete'",
     "start": "node server.js",
     "dev": "node --watch server.js"
   },

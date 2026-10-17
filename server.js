@@ -202,7 +202,7 @@ app.get('/api/events', (req, res) => {
 });
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health'], (req, res) => {
     res.json({
         status: 'ok',
         storage: storageType,
@@ -213,7 +213,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // --- State Endpoints ---
-app.get('/api/state', (req, res) => {
+app.get(['/api/state', '/state'], (req, res) => {
     try {
         const raw = db.getKv('main_state');
         if (raw) {
@@ -225,7 +225,7 @@ app.get('/api/state', (req, res) => {
     }
 });
 
-app.post('/api/state', (req, res) => {
+app.post(['/api/state', '/state'], (req, res) => {
     try {
         const { state, senderClientId } = req.body;
         if (!state || typeof state !== 'object') {
@@ -240,7 +240,7 @@ app.post('/api/state', (req, res) => {
 });
 
 // --- Undo Stack Endpoints ---
-app.get('/api/undo', (req, res) => {
+app.get(['/api/undo', '/undo'], (req, res) => {
     try {
         const raw = db.getKv('undo_stack');
         if (raw) {
@@ -252,7 +252,7 @@ app.get('/api/undo', (req, res) => {
     }
 });
 
-app.post('/api/undo', (req, res) => {
+app.post(['/api/undo', '/undo'], (req, res) => {
     try {
         const { undoStack } = req.body;
         const list = Array.isArray(undoStack) ? undoStack : [];
@@ -264,7 +264,7 @@ app.post('/api/undo', (req, res) => {
 });
 
 // --- History Endpoints ---
-app.get('/api/history', (req, res) => {
+app.get(['/api/history', '/history'], (req, res) => {
     try {
         const history = db.getHistory();
         res.json({ success: true, data: history });
@@ -273,7 +273,7 @@ app.get('/api/history', (req, res) => {
     }
 });
 
-app.post('/api/history', (req, res) => {
+app.post(['/api/history', '/history'], (req, res) => {
     try {
         const { entry, fullHistory, senderClientId } = req.body;
         if (entry && entry.hid) {
@@ -294,7 +294,7 @@ app.post('/api/history', (req, res) => {
     }
 });
 
-app.delete('/api/history/:hid', (req, res) => {
+app.delete(['/api/history/:hid', '/history/:hid'], (req, res) => {
     try {
         const { hid } = req.params;
         const senderClientId = req.query.senderClientId;
@@ -306,7 +306,7 @@ app.delete('/api/history/:hid', (req, res) => {
     }
 });
 
-app.delete('/api/history', (req, res) => {
+app.delete(['/api/history', '/history'], (req, res) => {
     try {
         const senderClientId = req.query.senderClientId;
         db.clearHistory();
