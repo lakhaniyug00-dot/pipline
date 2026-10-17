@@ -12,6 +12,9 @@ function loadHistory() {
 
 function saveHistory(history) {
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { }
+    if (window.ApiClient) {
+        window.ApiClient.saveHistory(history);
+    }
 }
 
 function loadMainState() {
@@ -26,6 +29,9 @@ function loadMainState() {
 
 function saveMainState(state) {
     try { localStorage.setItem(MAIN_KEY, JSON.stringify(state)); } catch (e) { }
+    if (window.ApiClient) {
+        window.ApiClient.saveState(state);
+    }
 }
 
 function uid() {
@@ -304,6 +310,9 @@ function deleteFromHistory(hid) {
     const entry = history[idx];
     history.splice(idx, 1);
     saveHistory(history);
+    if (window.ApiClient) {
+        window.ApiClient.deleteHistoryItem(hid);
+    }
     showToast(`🗑 "${entry.value}" removed from history.`);
     render();
 }
@@ -316,6 +325,9 @@ function initHistory() {
             if (history.length === 0) { showToast('History is already empty!'); return; }
             if (!confirm(`Clear all ${history.length} history entries permanently?`)) return;
             saveHistory([]);
+            if (window.ApiClient) {
+                window.ApiClient.clearHistory();
+            }
             showToast('🗑 All history cleared.');
             render();
         });
@@ -329,6 +341,25 @@ function initHistory() {
     }
 
     render();
+
+    // Cloud synchronization for history
+    if (window.ApiClient) {
+        if (window.ApiClient.isLoggedIn()) {
+            window.ApiClient.getHistory().then(remoteHistory => {
+                if (Array.isArray(remoteHistory)) {
+                    render();
+                }
+            });
+        }
+
+        window.ApiClient.on('authChanged', (user) => {
+            if (user) {
+                window.ApiClient.getHistory().then(() => render());
+            } else {
+                render();
+            }
+        });
+    }
 }
 
 // Guaranteed execution whether DOM is loading or already parsed

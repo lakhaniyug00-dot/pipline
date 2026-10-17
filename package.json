@@ -1,8 +1,23 @@
 {
   "name": "pipe-management",
-  "version": "1.0.0",
-  "private": true,
+  "version": "2.0.0",
+  "description": "Pipe & Expense Management System with Cloud Sync, MongoDB Atlas, and Multi-Device Support",
+  "main": "server.js",
   "scripts": {
-    "build": "echo 'Static build ready'"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test/api.test.js",
+    "build": "echo 'Build complete'"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
   }
 }

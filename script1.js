@@ -43,6 +43,9 @@ function undoLast() {
 
 function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { }
+    if (window.ApiClient) {
+        window.ApiClient.saveState(state, undoStack);
+    }
 }
 function loadState() {
     try {
@@ -87,6 +90,10 @@ function saveToHistory(item, colIdx, colName) {
 
         history.unshift(entry);
         localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+
+        if (window.ApiClient) {
+            window.ApiClient.saveHistoryEntry(entry);
+        }
     } catch (e) { }
 }
 const COLOR_VARS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'];
@@ -968,6 +975,38 @@ function initApp() {
     }
 
     render();
+
+    // Cloud integration and real-time multi-device sync
+    if (window.ApiClient) {
+        // Initial fetch from cloud if logged in
+        if (window.ApiClient.isLoggedIn()) {
+            window.ApiClient.getState().then(remoteState => {
+                if (remoteState && Array.isArray(remoteState.columns) && remoteState.columns.length > 0) {
+                    state = remoteState;
+                    render();
+                }
+            });
+        }
+
+        // Live updates from another device or after login/sync
+        window.ApiClient.on('stateUpdated', (newState) => {
+            if (newState && Array.isArray(newState.columns)) {
+                state = newState;
+                render();
+            }
+        });
+
+        window.ApiClient.on('authChanged', (user) => {
+            if (user) {
+                window.ApiClient.getState().then(remoteState => {
+                    if (remoteState && Array.isArray(remoteState.columns) && remoteState.columns.length > 0) {
+                        state = remoteState;
+                        render();
+                    }
+                });
+            }
+        });
+    }
 }
 
 // Guaranteed execution whether DOM is loading or already parsed
