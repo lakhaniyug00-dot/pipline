@@ -708,7 +708,7 @@ function renderSuffixTable() {
     wrap.innerHTML = html;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
     const form = document.getElementById('add-form');
     const input = document.getElementById('data-input');
 
@@ -1003,5 +1003,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-});
+}
+
+// Guaranteed execution whether DOM is loading or already parsed
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
+
 

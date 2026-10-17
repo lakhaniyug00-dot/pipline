@@ -317,42 +317,52 @@ function deleteFromHistory(hid) {
     render();
 }
 
-// ---- Clear all history ----
-document.getElementById('clear-all-btn').addEventListener('click', () => {
-    const history = loadHistory();
-    if (history.length === 0) { showToast('History is already empty!'); return; }
-    if (!confirm(`Clear all ${history.length} history entries permanently?`)) return;
-    saveHistory([]);
-    if (window.ApiClient) {
-        window.ApiClient.clearHistory();
+function initHistory() {
+    const clearBtn = document.getElementById('clear-all-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            const history = loadHistory();
+            if (history.length === 0) { showToast('History is already empty!'); return; }
+            if (!confirm(`Clear all ${history.length} history entries permanently?`)) return;
+            saveHistory([]);
+            if (window.ApiClient) {
+                window.ApiClient.clearHistory();
+            }
+            showToast('🗑 All history cleared.');
+            render();
+        });
     }
-    showToast('🗑 All history cleared.');
+
+    const searchEl = document.getElementById('hist-search-input');
+    if (searchEl) {
+        searchEl.addEventListener('input', () => {
+            render();
+        });
+    }
+
     render();
-});
 
-// ---- Search Input Listener ----
-const searchEl = document.getElementById('hist-search-input');
-if (searchEl) {
-    searchEl.addEventListener('input', () => {
-        render();
-    });
+    // Dynamic server sync
+    if (window.ApiClient) {
+        window.ApiClient.getHistory().then(remoteHistory => {
+            if (Array.isArray(remoteHistory)) {
+                render();
+            }
+        });
+
+        window.ApiClient.onEvent(evt => {
+            if (evt.type.startsWith('history_') || evt.type === 'state_updated') {
+                render();
+            }
+        });
+    }
 }
 
-// ---- Init ----
-render();
-
-// Dynamic server sync
-if (window.ApiClient) {
-    window.ApiClient.getHistory().then(remoteHistory => {
-        if (Array.isArray(remoteHistory)) {
-            render();
-        }
-    });
-
-    window.ApiClient.onEvent(evt => {
-        if (evt.type.startsWith('history_') || evt.type === 'state_updated') {
-            render();
-        }
-    });
+// Guaranteed execution whether DOM is loading or already parsed
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initHistory);
+} else {
+    initHistory();
 }
+
 
