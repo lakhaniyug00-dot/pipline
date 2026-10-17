@@ -98,21 +98,27 @@
             };
 
             eventSource.onerror = () => {
-                setConnectionStatus(false);
                 if (eventSource) {
                     eventSource.close();
                     eventSource = null;
                 }
-                // Retry connection after 5 seconds
-                setTimeout(connectSSE, 5000);
+                // Verify if backend API is reachable before marking offline
+                fetch(`${baseUrl}/api/health`, { cache: 'no-store' })
+                    .then(res => {
+                        if (res.ok) setConnectionStatus(true);
+                        else setConnectionStatus(false);
+                    })
+                    .catch(() => setConnectionStatus(false));
+
+                // Reconnect SSE after 8 seconds
+                setTimeout(connectSSE, 8000);
             };
 
             eventSource.onopen = () => {
                 setConnectionStatus(true);
             };
         } catch (e) {
-            setConnectionStatus(false);
-            setTimeout(connectSSE, 5000);
+            setTimeout(connectSSE, 8000);
         }
     }
 
