@@ -113,7 +113,77 @@ async function runTests() {
         assert.strictEqual(res.body.success, false);
     });
 
-    // 6. Static files serving
+    // 6. End-to-End Registration & Login Flow
+    let userAToken = null;
+    let userBToken = null;
+
+    await test('POST /api/auth/register creates user account and returns JWT token', async () => {
+        const res = await request(app)
+            .post('/api/auth/register')
+            .send({ username: 'alex2026', password: 'password123' });
+        assert.strictEqual(res.status, 201);
+        assert.strictEqual(res.body.success, true);
+        assert.ok(res.body.token);
+        assert.strictEqual(res.body.user.username, 'alex2026');
+        userAToken = res.body.token;
+    });
+
+    await test('POST /api/auth/login authenticates user with valid credentials', async () => {
+        const res = await request(app)
+            .post('/api/auth/login')
+            .send({ username: 'alex2026', password: 'password123' });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.success, true);
+        assert.ok(res.body.token);
+    });
+
+    await test('POST /api/auth/login rejects wrong password', async () => {
+        const res = await request(app)
+            .post('/api/auth/login')
+            .send({ username: 'alex2026', password: 'wrongPassword' });
+        assert.strictEqual(res.status, 401);
+        assert.strictEqual(res.body.success, false);
+    });
+
+    await test('User A can save and retrieve their private state', async () => {
+        const testState = {
+            columns: [
+                { name: 'Incoming Pipes', items: [{ id: '1', value: '100 - Pipe A', date: '01/01/2026' }] }
+            ]
+        };
+
+        const saveRes = await request(app)
+            .post('/api/state')
+            .set('Authorization', `Bearer ${userAToken}`)
+            .send({ state: testState });
+        assert.strictEqual(saveRes.status, 200);
+        assert.strictEqual(saveRes.body.success, true);
+
+        const getRes = await request(app)
+            .get('/api/state')
+            .set('Authorization', `Bearer ${userAToken}`);
+        assert.strictEqual(getRes.status, 200);
+        assert.strictEqual(getRes.body.data.columns[0].name, 'Incoming Pipes');
+        assert.strictEqual(getRes.body.data.columns[0].items[0].value, '100 - Pipe A');
+    });
+
+    await test('Multi-User Isolation: User B cannot view User A data', async () => {
+        const regB = await request(app)
+            .post('/api/auth/register')
+            .send({ username: 'bob2026', password: 'password123' });
+        assert.strictEqual(regB.status, 201);
+        userBToken = regB.body.token;
+
+        // User B fetches their state
+        const getB = await request(app)
+            .get('/api/state')
+            .set('Authorization', `Bearer ${userBToken}`);
+        assert.strictEqual(getB.status, 200);
+        // User B's state does NOT have User A's 'Incoming Pipes'
+        assert.notStrictEqual(getB.body.data.columns[0]?.name, 'Incoming Pipes');
+    });
+
+    // 7. Static files serving
     await test('GET / should serve index.html', async () => {
         const res = await request(app).get('/');
         assert.strictEqual(res.status, 200);

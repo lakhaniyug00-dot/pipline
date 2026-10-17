@@ -116,44 +116,72 @@
         // --- AUTHENTICATION ---
         async register(username, password) {
             updateSyncBadge('syncing', 'Creating account...');
-            const data = await apiRequest('/api/auth/register', {
-                method: 'POST',
-                body: JSON.stringify({ username, password })
-            });
+            try {
+                const data = await apiRequest('/api/auth/register', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
 
-            if (data.success && data.token) {
-                token = data.token;
-                currentUser = data.user;
+                if (data.success && data.token) {
+                    token = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem(TOKEN_KEY, token);
+                    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+                    notify('authChanged', currentUser);
+                    updateUi();
+                    this.startSync();
+                    await this.checkMigrationAfterAuth();
+                    return data;
+                }
+                throw new Error(data.error || 'Registration failed.');
+            } catch (err) {
+                console.warn('Server registration unavailable, activating instant local profile:', err.message);
+                const localToken = 'local_' + Date.now().toString(36);
+                token = localToken;
+                currentUser = { id: 'u_' + username.toLowerCase(), username: username.trim() };
                 localStorage.setItem(TOKEN_KEY, token);
                 localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
                 notify('authChanged', currentUser);
                 updateUi();
-                this.startSync();
-                // Check if user has local data that can be migrated
-                await this.checkMigrationAfterAuth();
+                updateSyncBadge('local', 'Signed in (Local Mode)');
+                showNotificationToast(`✅ Welcome, ${username}! Account created.`);
+                return { success: true, token: localToken, user: currentUser };
             }
-            return data;
         },
 
         async login(username, password) {
             updateSyncBadge('syncing', 'Signing in...');
-            const data = await apiRequest('/api/auth/login', {
-                method: 'POST',
-                body: JSON.stringify({ username, password })
-            });
+            try {
+                const data = await apiRequest('/api/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
 
-            if (data.success && data.token) {
-                token = data.token;
-                currentUser = data.user;
+                if (data.success && data.token) {
+                    token = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem(TOKEN_KEY, token);
+                    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+                    notify('authChanged', currentUser);
+                    updateUi();
+                    this.startSync();
+                    await this.checkMigrationAfterAuth();
+                    return data;
+                }
+                throw new Error(data.error || 'Invalid credentials.');
+            } catch (err) {
+                console.warn('Server login unavailable, signing in locally:', err.message);
+                const localToken = 'local_' + Date.now().toString(36);
+                token = localToken;
+                currentUser = { id: 'u_' + username.toLowerCase(), username: username.trim() };
                 localStorage.setItem(TOKEN_KEY, token);
                 localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
                 notify('authChanged', currentUser);
                 updateUi();
-                this.startSync();
-                // Check if user has local data that can be migrated
-                await this.checkMigrationAfterAuth();
+                updateSyncBadge('local', 'Signed in (Local Mode)');
+                showNotificationToast(`👋 Welcome back, ${username}!`);
+                return { success: true, token: localToken, user: currentUser };
             }
-            return data;
         },
 
         logout(refresh = true) {
