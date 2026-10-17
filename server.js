@@ -294,6 +294,122 @@ app.get(['/api/auth/me', '/auth/me'], requireAuth, ensureDb, async (req, res) =>
     }
 });
 
+// ==================== MULTI-ACCOUNT QUICK SWITCHER & MANAGEMENT ====================
+// Get all available accounts
+app.get(['/api/auth/accounts', '/api/accounts'], ensureDb, async (req, res) => {
+    try {
+        let accounts = [];
+        if (req.useMongo) {
+            const users = await User.find({}).sort({ createdAt: 1 }).select('username createdAt');
+            accounts = users.map(u => ({ username: u.username, createdAt: u.createdAt }));
+        } else {
+            accounts = (memoryStore.users || []).map(u => ({ username: u.username, createdAt: u.createdAt }));
+        }
+        // Always ensure 'valam' is available
+        const hasValam = accounts.some(a => (a.username || '').toLowerCase() === 'valam');
+        if (!hasValam) {
+            accounts.unshift({ username: 'valam' });
+        }
+        res.json({ success: true, accounts });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Quick select / create account without password (1-click account access)
+app.post(['/api/auth/select', '/api/auth/quick-login'], ensureDb, async (req, res) => {
+    try {
+        const rawUname = (req.body.username || '').trim();
+        if (!rawUname) {
+            return res.status(400).json({ success: false, error: 'Username is required.' });
+        }
+        const cleanUsername = rawUname.toLowerCase();
+
+        if (req.useMongo) {
+            let user = await User.findOne({ username: cleanUsername });
+            if (!user) {
+                const salt = await bcrypt.genSalt(10);
+                const passwordHash = await bcrypt.hash('ValamPass123!', salt);
+                user = await User.create({
+                    username: cleanUsername,
+                    passwordHash
+                });
+                await PipelineData.create({
+                    userId: user._id,
+                    columns: [{ name: '', items: [] }],
+                    undoStack: [],
+                    version: 1
+                });
+            }
+            const token = generateToken(user);
+            return res.json({
+                success: true,
+                token,
+                user: { id: user._id.toString(), username: user.username }
+            });
+        } else {
+            let user = (memoryStore.users || []).find(u => u.username === cleanUsername);
+            if (!user) {
+                const salt = await bcrypt.genSalt(10);
+                const passwordHash = await bcrypt.hash('ValamPass123!', salt);
+                const newId = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+                user = {
+                    _id: newId,
+                    username: cleanUsername,
+                    passwordHash,
+                    createdAt: new Date()
+                };
+                memoryStore.users.push(user);
+                memoryStore.pipelines[newId] = {
+                    userId: newId,
+                    columns: [{ name: '', items: [] }],
+                    undoStack: [],
+                    version: 1,
+                    updatedAt: new Date()
+                };
+                saveFallbackStore();
+            }
+            const token = generateToken(user);
+            return res.json({
+                success: true,
+                token,
+                user: { id: user._id, username: user.username }
+            });
+        }
+    } catch (err) {
+        console.error('Account select error:', err);
+        res.status(500).json({ success: false, error: 'Failed to select account: ' + err.message });
+    }
+});
+
+// Delete account
+app.delete(['/api/auth/accounts/:username', '/api/accounts/:username'], ensureDb, async (req, res) => {
+    try {
+        const cleanUsername = String(req.params.username || '').trim().toLowerCase();
+        if (!cleanUsername) return res.status(400).json({ success: false, error: 'Username required' });
+
+        if (req.useMongo) {
+            const user = await User.findOne({ username: cleanUsername });
+            if (user) {
+                await PipelineData.deleteOne({ userId: user._id });
+                await HistoryEntry.deleteMany({ userId: user._id });
+                await User.deleteOne({ _id: user._id });
+            }
+        } else {
+            const user = (memoryStore.users || []).find(u => u.username === cleanUsername);
+            if (user) {
+                delete memoryStore.pipelines[user._id];
+                if (memoryStore.history && memoryStore.history[user._id]) delete memoryStore.history[user._id];
+                memoryStore.users = memoryStore.users.filter(u => u._id !== user._id);
+                saveFallbackStore();
+            }
+        }
+        res.json({ success: true, message: 'Account deleted' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ==================== PIPELINE / EXPENSE STATE ROUTES ====================
 // Get current user's state
 app.get(['/api/state', '/state'], requireAuth, ensureDb, async (req, res) => {
