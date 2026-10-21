@@ -116,22 +116,26 @@ async function runTests() {
     // 6. End-to-End Registration & Login Flow
     let userAToken = null;
     let userBToken = null;
+    // Unique names per test run to avoid 409 conflicts with leftover data
+    const testSuffix = Date.now().toString(36);
+    const userAName = 'alex_' + testSuffix;
+    const userBName = 'bob_' + testSuffix;
 
     await test('POST /api/auth/register creates user account and returns JWT token', async () => {
         const res = await request(app)
             .post('/api/auth/register')
-            .send({ username: 'alex2026', password: 'password123' });
+            .send({ username: userAName, password: 'password123' });
         assert.strictEqual(res.status, 201);
         assert.strictEqual(res.body.success, true);
         assert.ok(res.body.token);
-        assert.strictEqual(res.body.user.username, 'alex2026');
+        assert.strictEqual(res.body.user.username, userAName);
         userAToken = res.body.token;
     });
 
     await test('POST /api/auth/login authenticates user with valid credentials', async () => {
         const res = await request(app)
             .post('/api/auth/login')
-            .send({ username: 'alex2026', password: 'password123' });
+            .send({ username: userAName, password: 'password123' });
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.body.success, true);
         assert.ok(res.body.token);
@@ -140,7 +144,7 @@ async function runTests() {
     await test('POST /api/auth/login rejects wrong password', async () => {
         const res = await request(app)
             .post('/api/auth/login')
-            .send({ username: 'alex2026', password: 'wrongPassword' });
+            .send({ username: userAName, password: 'wrongPassword' });
         assert.strictEqual(res.status, 401);
         assert.strictEqual(res.body.success, false);
     });
@@ -170,7 +174,7 @@ async function runTests() {
     await test('Multi-User Isolation: User B cannot view User A data', async () => {
         const regB = await request(app)
             .post('/api/auth/register')
-            .send({ username: 'bob2026', password: 'password123' });
+            .send({ username: userBName, password: 'password123' });
         assert.strictEqual(regB.status, 201);
         userBToken = regB.body.token;
 

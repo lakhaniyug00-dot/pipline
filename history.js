@@ -346,7 +346,8 @@ function initHistory() {
     if (window.ApiClient) {
         if (window.ApiClient.isLoggedIn()) {
             window.ApiClient.getHistory().then(remoteHistory => {
-                if (Array.isArray(remoteHistory)) {
+                if (Array.isArray(remoteHistory) && remoteHistory.length > 0) {
+                    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(remoteHistory)); } catch (e) { }
                     render();
                 }
             });
@@ -354,7 +355,12 @@ function initHistory() {
 
         window.ApiClient.on('authChanged', (user) => {
             if (user) {
-                window.ApiClient.getHistory().then(() => render());
+                window.ApiClient.getHistory().then(remoteHistory => {
+                    if (Array.isArray(remoteHistory)) {
+                        try { localStorage.setItem(HISTORY_KEY, JSON.stringify(remoteHistory)); } catch (e) { }
+                    }
+                    render();
+                });
             } else {
                 render();
             }

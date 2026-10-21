@@ -303,9 +303,9 @@
             if (!this.isLoggedIn()) return null;
             try {
                 const data = await apiRequest('/api/state');
-                if (data.success && data.state) {
-                    lastKnownVersion = data.version || 0;
-                    return data.state;
+                if (data.success && data.data) {
+                    lastKnownVersion = data.data.version || 0;
+                    return data.data;
                 }
             } catch (err) {
                 console.warn('Failed to fetch cloud pipeline state:', err.message);
@@ -321,7 +321,7 @@
                     body: JSON.stringify({
                         state,
                         undoStack,
-                        deviceId
+                        senderDeviceId: deviceId
                     })
                 });
                 if (data.success) {
@@ -337,8 +337,8 @@
             if (!this.isLoggedIn()) return null;
             try {
                 const data = await apiRequest('/api/history');
-                if (data.success && Array.isArray(data.history)) {
-                    return data.history;
+                if (data.success && Array.isArray(data.data)) {
+                    return data.data;
                 }
             } catch (err) { }
             return null;
@@ -349,7 +349,17 @@
             try {
                 await apiRequest('/api/history', {
                     method: 'POST',
-                    body: JSON.stringify(entry)
+                    body: JSON.stringify({ entry })
+                });
+            } catch (err) { }
+        },
+
+        async saveHistory(fullHistory) {
+            if (!this.isLoggedIn()) return;
+            try {
+                await apiRequest('/api/history', {
+                    method: 'POST',
+                    body: JSON.stringify({ fullHistory })
                 });
             } catch (err) { }
         },
@@ -433,16 +443,12 @@
             const displayName = capitalize(uname);
 
             // EXACT CHIP DESIGN FROM USER'S SCREENSHOT
-            container.innerHTML = '<div id="account-user-chip" title="Click to switch account / ખાતું બદલો" style="display:flex; align-items:center; gap:9px; background:#fff; border:1.5px solid #cbd5e1; border-radius:12px; padding:6px 14px; box-shadow:0 2px 8px rgba(0,0,0,0.06); cursor:pointer; user-select:none; transition:all 0.15s ease;">'
-                + '<div style="width:28px; height:28px; border-radius:7px; background:#0F172A; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Inter', sans-serif; font-size:14px; font-weight:800; flex-shrink:0;">'
-                + escapeHtml(initial)
-                + '</div>'
-                + '<span style="font-family:'Inter', -apple-system, sans-serif; font-size:15px; font-weight:700; color:#0F172A; letter-spacing:0.2px;">'
-                + escapeHtml(displayName)
-                + '</span>'
-                + '</div>'
-                + '<button id="account-switch-btn" title="Switch Account / ખાતું બદલો" style="background:#e3f3ff; border:1.5px solid #1a3a8a; border-radius:999px; padding:5px 12px; cursor:pointer; color:#1a3a8a; font-family:'Patrick Hand'; font-size:15px; transition:all 0.15s;">👥 Switch</button>'
-                + '<button id="account-sync-btn" title="Force Sync Now" style="background:#fff; border:1.5px solid #1a3a8a; border-radius:999px; padding:5px 10px; cursor:pointer; color:#1a3a8a; font-family:'Patrick Hand'; font-size:14px;">🔄 Sync</button>';
+            container.innerHTML = `<div id="account-user-chip" title="Click to switch account / ખાતું બદલો" style="display:flex; align-items:center; gap:9px; background:#fff; border:1.5px solid #cbd5e1; border-radius:12px; padding:6px 14px; box-shadow:0 2px 8px rgba(0,0,0,0.06); cursor:pointer; user-select:none; transition:all 0.15s ease;">
+                <div style="width:28px; height:28px; border-radius:7px; background:#0F172A; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Inter', sans-serif; font-size:14px; font-weight:800; flex-shrink:0;">${escapeHtml(initial)}</div>
+                <span style="font-family:'Inter', -apple-system, sans-serif; font-size:15px; font-weight:700; color:#0F172A; letter-spacing:0.2px;">${escapeHtml(displayName)}</span>
+            </div>
+            <button id="account-switch-btn" title="Switch Account / ખાતું બદલો" style="background:#e3f3ff; border:1.5px solid #1a3a8a; border-radius:999px; padding:5px 12px; cursor:pointer; color:#1a3a8a; font-family:'Patrick Hand'; font-size:15px; transition:all 0.15s;">👥 Switch</button>
+            <button id="account-sync-btn" title="Force Sync Now" style="background:#fff; border:1.5px solid #1a3a8a; border-radius:999px; padding:5px 10px; cursor:pointer; color:#1a3a8a; font-family:'Patrick Hand'; font-size:14px;">🔄 Sync</button>`;
 
             document.getElementById('account-user-chip')?.addEventListener('click', openAccountModal);
             document.getElementById('account-switch-btn')?.addEventListener('click', openAccountModal);
@@ -456,9 +462,9 @@
 
             updateSyncBadge('synced', 'Synced across devices');
         } else {
-            container.innerHTML = '<button id="open-auth-btn" style="background:#1a3a8a; color:#fff; border:none; border-radius:999px; padding:7px 18px; font-family:'Patrick Hand', cursive; font-size:16px; cursor:pointer; box-shadow:0 2px 8px rgba(26,58,138,0.25); display:flex; align-items:center; gap:8px;">'
-                + '<span>⚡</span> <span>Select Account</span>'
-                + '</button>';
+            container.innerHTML = `<button id="open-auth-btn" style="background:#1a3a8a; color:#fff; border:none; border-radius:999px; padding:7px 18px; font-family:'Patrick Hand', cursive; font-size:16px; cursor:pointer; box-shadow:0 2px 8px rgba(26,58,138,0.25); display:flex; align-items:center; gap:8px;">
+                <span>⚡</span> <span>Select Account</span>
+            </button>`;
 
             document.getElementById('open-auth-btn')?.addEventListener('click', openAccountModal);
             updateSyncBadge('local', 'Offline / Local Mode');
@@ -472,31 +478,31 @@
         overlay.id = 'account-modal-overlay';
         overlay.style.cssText = 'position:fixed; inset:0; background:rgba(15, 23, 42, 0.65); backdrop-filter:blur(4px); z-index:100000; display:none; align-items:center; justify-content:center; padding:16px;';
 
-        overlay.innerHTML = '<div style="background:#fffdf5; border:2px solid #1a3a8a; border-radius:20px; box-shadow:0 16px 40px rgba(0,0,0,0.25); width:100%; max-width:440px; padding:24px 22px; position:relative; font-family:'Patrick Hand', cursive, sans-serif;">'
-            + '<button id="modal-close-btn" style="position:absolute; top:14px; right:18px; background:none; border:none; font-size:24px; cursor:pointer; color:#1a3a8a; line-height:1;">✕</button>'
-            + '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-right:24px;">'
-            + '<div>'
-            + '<div style="font-family:'Caveat', cursive; font-size:28px; font-weight:700; color:#1a3a8a; line-height:1.1;">Select Account</div>'
-            + '<div style="font-size:14px; color:#5a5030;">ઝડપી લૉગિન / 1-Click Multi-Account</div>'
-            + '</div>'
-            + '<div style="display:flex; gap:6px;">'
-            + '<button id="modal-btn-add" style="background:#e8f9ef; border:1.5px solid #10b981; color:#0f766e; border-radius:8px; padding:5px 12px; font-size:13px; font-weight:700; cursor:pointer; font-family:'Patrick Hand';">＋ Add</button>'
-            + '<button id="modal-btn-manage" style="background:#fff; border:1.5px solid #c9b97b; color:#1a3a8a; border-radius:8px; padding:5px 12px; font-size:13px; font-weight:700; cursor:pointer; font-family:'Patrick Hand';">✏️ Manage</button>'
-            + '</div>'
-            + '</div>'
-            + '<div id="modal-add-panel" style="display:none; background:#f5eed8; border:1.5px solid #d9c98a; border-radius:12px; padding:12px; margin-bottom:14px;">'
-            + '<label style="font-size:14px; font-weight:700; color:#1a3a8a; display:block; margin-bottom:6px;">New Account Name / નામ</label>'
-            + '<div style="display:flex; gap:8px;">'
-            + '<input type="text" id="modal-add-input" placeholder="e.g. valam" autocomplete="off" style="flex:1; padding:9px 12px; border:1.5px solid #c9b97b; border-radius:8px; font-family:'Patrick Hand'; font-size:16px; outline:none; background:#fff; color:#1a3a8a;" />'
-            + '<button id="modal-add-save-btn" style="background:#1a3a8a; color:#fff; border:none; border-radius:8px; padding:9px 14px; font-family:'Patrick Hand'; font-size:15px; font-weight:700; cursor:pointer;">💾 Save</button>'
-            + '</div>'
-            + '</div>'
-            + '<div id="modal-alert" style="display:none; padding:8px 12px; border-radius:8px; font-size:14px; margin-bottom:12px;"></div>'
-            + '<div id="modal-accounts-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-height:280px; overflow-y:auto; padding:2px;"></div>'
-            + '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #d9c98a; font-size:13px; color:#6b5d2a; text-align:center;">'
-            + '🔒 Isolated workspace & real-time sync for each account across all devices.'
-            + '</div>'
-            + '</div>';
+        overlay.innerHTML = `<div style="background:#fffdf5; border:2px solid #1a3a8a; border-radius:20px; box-shadow:0 16px 40px rgba(0,0,0,0.25); width:100%; max-width:440px; padding:24px 22px; position:relative; font-family:'Patrick Hand', cursive, sans-serif;">
+            <button id="modal-close-btn" style="position:absolute; top:14px; right:18px; background:none; border:none; font-size:24px; cursor:pointer; color:#1a3a8a; line-height:1;">✕</button>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-right:24px;">
+                <div>
+                    <div style="font-family:'Caveat', cursive; font-size:28px; font-weight:700; color:#1a3a8a; line-height:1.1;">Select Account</div>
+                    <div style="font-size:14px; color:#5a5030;">ઝડપી લૉગિન / 1-Click Multi-Account</div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button id="modal-btn-add" style="background:#e8f9ef; border:1.5px solid #10b981; color:#0f766e; border-radius:8px; padding:5px 12px; font-size:13px; font-weight:700; cursor:pointer; font-family:'Patrick Hand';">＋ Add</button>
+                    <button id="modal-btn-manage" style="background:#fff; border:1.5px solid #c9b97b; color:#1a3a8a; border-radius:8px; padding:5px 12px; font-size:13px; font-weight:700; cursor:pointer; font-family:'Patrick Hand';">✏️ Manage</button>
+                </div>
+            </div>
+            <div id="modal-add-panel" style="display:none; background:#f5eed8; border:1.5px solid #d9c98a; border-radius:12px; padding:12px; margin-bottom:14px;">
+                <label style="font-size:14px; font-weight:700; color:#1a3a8a; display:block; margin-bottom:6px;">New Account Name / નામ</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="modal-add-input" placeholder="e.g. valam" autocomplete="off" style="flex:1; padding:9px 12px; border:1.5px solid #c9b97b; border-radius:8px; font-family:'Patrick Hand'; font-size:16px; outline:none; background:#fff; color:#1a3a8a;" />
+                    <button id="modal-add-save-btn" style="background:#1a3a8a; color:#fff; border:none; border-radius:8px; padding:9px 14px; font-family:'Patrick Hand'; font-size:15px; font-weight:700; cursor:pointer;">💾 Save</button>
+                </div>
+            </div>
+            <div id="modal-alert" style="display:none; padding:8px 12px; border-radius:8px; font-size:14px; margin-bottom:12px;"></div>
+            <div id="modal-accounts-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-height:280px; overflow-y:auto; padding:2px;"></div>
+            <div style="margin-top:16px; padding-top:12px; border-top:1px dashed #d9c98a; font-size:13px; color:#6b5d2a; text-align:center;">
+                🔒 Isolated workspace &amp; real-time sync for each account across all devices.
+            </div>
+        </div>`;
 
         document.body.appendChild(overlay);
 
@@ -581,16 +587,12 @@
             chip.className = 'user-modal-chip';
             chip.style.cssText = 'background:' + (isCurrent ? '#eff6ff' : '#fff') + '; border:1.5px solid ' + (isCurrent ? '#2563eb' : '#d9c98a') + '; border-radius:12px; padding:10px 12px; display:flex; align-items:center; gap:10px; cursor:pointer; position:relative; transition:all 0.15s ease; box-shadow:0 2px 6px rgba(40,30,10,0.06);';
 
-            chip.innerHTML = '<div style="width:32px; height:32px; border-radius:8px; background:' + color + '; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Inter', sans-serif; font-size:14px; font-weight:800; flex-shrink:0;">'
-                + escapeHtml(initial)
-                + '</div>'
-                + '<div style="flex:1; min-width:0;">'
-                + '<div style="font-family:'Inter', -apple-system, sans-serif; font-size:14.5px; font-weight:700; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">'
-                + escapeHtml(capitalize(uname))
-                + '</div>'
-                + (isCurrent ? '<div style="font-size:11px; font-weight:700; color:#2563eb;">● Active</div>' : '')
-                + '</div>'
-                + (manageMode ? '<button class="chip-delete-btn" style="position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:#ef4444; color:#fff; border:none; cursor:pointer; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; line-height:1;">✕</button>' : '');
+            chip.innerHTML = `<div style="width:32px; height:32px; border-radius:8px; background:${color}; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Inter', sans-serif; font-size:14px; font-weight:800; flex-shrink:0;">${escapeHtml(initial)}</div>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-family:'Inter', -apple-system, sans-serif; font-size:14.5px; font-weight:700; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(capitalize(uname))}</div>
+                    ${isCurrent ? '<div style="font-size:11px; font-weight:700; color:#2563eb;">● Active</div>' : ''}
+                </div>
+                ${manageMode ? '<button class="chip-delete-btn" style="position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:#ef4444; color:#fff; border:none; cursor:pointer; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; line-height:1;">✕</button>' : ''}`;
 
             chip.addEventListener('click', async (e) => {
                 if (e.target.closest('.chip-delete-btn')) {
